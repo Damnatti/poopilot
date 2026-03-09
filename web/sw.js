@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poopilot-v1';
+const CACHE_NAME = 'poopilot-v2';
 const SHELL_URLS = [
   '/',
   '/index.html',
@@ -30,8 +30,15 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first: try fresh version, fall back to cache
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((resp) => {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return resp;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
