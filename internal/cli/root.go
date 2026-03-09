@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	port    int
-	verbose bool
+	port     int
+	verbose  bool
+	relayURL string
 
 	// Set via ldflags at build time.
 	Version = "dev"
@@ -24,11 +25,12 @@ func NewRootCmd() *cobra.Command {
 Wraps any CLI tool (Claude, Codex, Aider, etc.) in a PTY and lets you
 monitor terminal output and approve actions from your phone via P2P WebRTC.
 
-No servers. No accounts. Just scan a QR code.`,
+No accounts. Just scan a QR code.`,
 	}
 
 	root.PersistentFlags().IntVarP(&port, "port", "p", 9876, "HTTP port for pairing")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	root.PersistentFlags().StringVar(&relayURL, "relay", "", "relay server URL for cross-network pairing (e.g. https://poopilot-relay.workers.dev)")
 
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newVersionCmd())

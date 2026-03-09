@@ -44,8 +44,21 @@ class App {
     this.cleanup();
 
     this.showStatus('Connecting...', 'info');
-    this.log('Fetching offer...');
 
+    // Check for relay room ID in URL hash
+    const params = new URLSearchParams(location.hash.slice(1));
+    this.roomId = params.get('room');
+
+    if (this.roomId) {
+      this.log(`Relay mode, room: ${this.roomId}`);
+      await this.connectViaRelay(this.roomId);
+    } else {
+      this.log('Local mode');
+      await this.connectLocal();
+    }
+  }
+
+  async connectLocal() {
     try {
       const resp = await fetch('/offer');
       if (!resp.ok) {
@@ -61,6 +74,28 @@ class App {
       await this.startPairing(data.offer);
     } catch (e) {
       this.showStatus(`Network error: ${e.message}`, 'error');
+    }
+  }
+
+  async connectViaRelay(roomId) {
+    try {
+      const baseUrl = `${location.origin}/relay/${roomId}`;
+      const resp = await fetch(`${baseUrl}/offer`);
+      if (!resp.ok) {
+        this.showStatus('Waiting for host...', 'info');
+        // Retry after 2s
+        setTimeout(() => this.connectViaRelay(roomId), 2000);
+        return;
+      }
+      const data = await resp.json();
+      if (data.error) {
+        this.showStatus(`Offer error: ${data.error}`, 'error');
+        return;
+      }
+      this.log(`Relay offer: ${data.offer?.length} chars`);
+      await this.startPairing(data.offer);
+    } catch (e) {
+      this.showStatus(`Relay error: ${e.message}`, 'error');
     }
   }
 
@@ -126,11 +161,22 @@ class App {
         return;
       }
 
-      const resp = await fetch('/answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer: answerCompressed }),
-      });
+      let resp;
+      if (this.roomId) {
+        // Relay mode: PUT answer to relay
+        resp = await fetch(`${location.origin}/relay/${this.roomId}/answer`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/plain' },
+          body: answerCompressed,
+        });
+      } else {
+        // Local mode: POST answer to local server
+        resp = await fetch('/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answer: answerCompressed }),
+        });
+      }
 
       if (resp.ok) {
         this.showStatus('Paired, waiting for data...', 'info');

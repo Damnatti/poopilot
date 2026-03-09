@@ -9,7 +9,7 @@
 <p align="center">
   <strong>Control your AI coding agents from the toilet.</strong>
   <br>
-  Monitor & approve Claude CLI, Codex, and other terminal AI tools from your phone — zero servers, pure P2P.
+  Monitor & approve Claude CLI, Codex, and other terminal AI tools from your phone over P2P WebRTC.
 </p>
 
 <p align="center">
@@ -25,9 +25,9 @@ You kick off a Claude Code session. It's churning through your codebase, reading
 
 But Claude needs approval to run `rm -rf node_modules && npm install`. Your terminal is on your desk. You're... not.
 
-**poopilot** wraps your AI CLI tool in a PTY, displays a QR code, and lets you monitor and control the session from your phone over a direct peer-to-peer WebRTC connection. No cloud servers. No accounts. No bullshit.
+**poopilot** wraps your AI CLI tool in a PTY, displays a QR code, and lets you monitor and control the session from your phone over a direct peer-to-peer WebRTC connection. No accounts. No bullshit.
 
-Scan. Connect. Approve from anywhere in your apartment.
+Scan. Connect. Approve from anywhere.
 
 ## Install
 
@@ -46,7 +46,7 @@ go install github.com/denismelnikov/poopilot/cmd/poopilot@latest
 ### From source
 
 ```bash
-git clone https://github.com/denismelnikov/poopilot.git
+git clone https://github.com/Damnatti/poopilot.git
 cd poopilot
 make build
 # binary is in ./bin/poopilot
@@ -55,13 +55,14 @@ make build
 ## Usage
 
 ```bash
-# Wrap any CLI tool
+# Same network (WiFi / VPN) — scan QR from your phone
 poopilot run claude
-poopilot run codex
-poopilot run aider
-poopilot run -- claude --model opus
 
-# That's it. A QR code appears. Scan it with your phone.
+# Any network — uses a lightweight relay for the initial handshake
+poopilot run --relay https://poopilot-relay.workers.dev claude
+
+# Pass args to the wrapped tool
+poopilot run -- claude --model opus
 ```
 
 Your terminal works exactly as before — same input, same output. But now your phone is a second screen that can:
@@ -76,28 +77,50 @@ Your terminal works exactly as before — same input, same output. But now your 
 ```
 ┌─────────────┐       P2P WebRTC        ┌─────────────┐
 │  Your Mac   │◄══════════════════════►  │  Your Phone │
-│             │    (same WiFi/VPN)       │             │
-│  poopilot   │                          │  PWA with   │
-│  ┌───────┐  │  ┌──────────────────┐    │  xterm.js   │
-│  │ claude│◄─┤──┤ PTY + WebRTC     │    │             │
-│  │  CLI  │  │  │ bridge           │    │  approve /  │
-│  └───────┘  │  └──────────────────┘    │  deny UI    │
+│             │                          │             │
+│  poopilot   │  ┌───────────────────┐   │  PWA with   │
+│  ┌───────┐  │  │ PTY + WebRTC      │   │  xterm.js   │
+│  │ claude│◄─┤──┤ bridge            │   │             │
+│  │  CLI  │  │  └───────────────────┘   │  approve /  │
+│  └───────┘  │                          │  deny UI    │
 └─────────────┘                          └─────────────┘
+       ▲                                        ▲
+       └──── optional relay for handshake ──────┘
+             (only SDP exchange, ~2KB)
+             terminal data always P2P
 ```
 
 1. `poopilot run claude` spawns Claude CLI inside a PTY
-2. A local HTTP server starts and displays a QR code with the URL
-3. Phone scans QR, loads a PWA, establishes a WebRTC P2P connection
+2. A QR code appears in your terminal
+3. Phone scans QR, establishes a WebRTC P2P connection
 4. Terminal I/O streams over DataChannels — your phone becomes a live mirror
 5. When Claude asks "Allow this action?", your phone vibrates and shows approve/deny buttons
 6. You tap approve. Claude continues. You continue... whatever you were doing.
 
-**Zero servers involved.** The HTTP server is local (for the initial handshake only). All terminal data flows directly between your machine and phone via WebRTC with DTLS encryption.
+**Terminal data always flows directly** between your machine and phone via encrypted WebRTC. The optional `--relay` flag only helps with the initial handshake (~2KB of connection metadata) so your phone doesn't need to be on the same network.
+
+## Network Modes
+
+| Mode | Flag | Phone network | How it works |
+|------|------|---------------|--------------|
+| **Local** | *(default)* | Same WiFi / VPN | QR points to local IP, no external services |
+| **Relay** | `--relay <url>` | Any network | Handshake goes through a [Cloudflare Worker](relay/), terminal data still P2P |
+
+### Self-hosting the relay
+
+The relay is a tiny Cloudflare Worker (~50 lines) that stores offer/answer blobs in KV with a 5-minute TTL. No terminal data ever touches it.
+
+```bash
+cd relay
+npx wrangler kv namespace create ROOMS    # create KV, paste ID into wrangler.toml
+npx wrangler deploy                        # deploy to your CF account (free)
+```
+
+Then use your own URL: `poopilot run --relay https://your-relay.workers.dev claude`
 
 ## Requirements
 
 - macOS or Linux (arm64/amd64)
-- Phone on the same network as your machine (WiFi or VPN like Tailscale)
 - Go 1.22+ (if building from source)
 
 ## Architecture
@@ -112,9 +135,11 @@ internal/
   protocol/        Binary message protocol over DataChannels
   bridge/          PTY ↔ WebRTC router + approval detection
   approval/        Regex-based y/n prompt detection
+  relay/           HTTP client for cloud signaling relay
   qr/              QR code terminal rendering
   cli/             Cobra commands
 web/               Embedded PWA (xterm.js + vanilla JS)
+relay/             Cloudflare Worker for cross-network signaling
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full deep dive.
@@ -131,18 +156,18 @@ Works with anything that runs in a terminal:
 | GitHub Copilot CLI | Should work |
 | Any interactive CLI | Should work |
 
-Approval detection has built-in patterns for Claude and Codex prompts, plus generic yes/no detection. Custom patterns can be added.
+Approval detection has built-in patterns for Claude and Codex prompts, plus generic yes/no detection.
 
 ## FAQ
 
 **Q: Does this work over the internet?**
-A: It works over any network where your phone can reach your machine — same WiFi, Tailscale, WireGuard, etc. It uses Google STUN servers for NAT traversal, so it may work across networks too, but same-network is most reliable.
+A: Yes! Use `--relay` flag to pair from any network. The relay only handles the initial handshake (~2KB). All terminal data flows directly between your devices via WebRTC.
 
 **Q: Is it secure?**
-A: All data flows over WebRTC DataChannels with mandatory DTLS encryption. No data touches any server. The signaling happens locally over your LAN.
+A: All terminal data flows over WebRTC DataChannels with mandatory DTLS encryption. The relay (if used) only sees encrypted connection metadata, never your terminal content.
 
 **Q: Can I use it without the phone?**
-A: Yes — `poopilot run claude` works as a normal terminal wrapper even without connecting a phone. The phone part is optional.
+A: Yes — `poopilot run claude` works as a normal terminal wrapper even without connecting a phone.
 
 **Q: Why "poopilot"?**
 A: You know exactly why.
@@ -153,6 +178,7 @@ A: You know exactly why.
 make test          # Run all tests with race detector
 make test-cover    # Tests + HTML coverage report
 make build         # Build binary to ./bin/poopilot
+make install       # Install to $GOPATH/bin
 make lint          # Run golangci-lint
 ```
 

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +22,7 @@ import (
 	"github.com/denismelnikov/poopilot/internal/bridge"
 	"github.com/denismelnikov/poopilot/internal/pty"
 	"github.com/denismelnikov/poopilot/internal/qr"
+	"github.com/denismelnikov/poopilot/internal/relay"
 	rtc "github.com/denismelnikov/poopilot/internal/webrtc"
 	"github.com/spf13/cobra"
 )
@@ -34,7 +37,7 @@ func newRunCmd() *cobra.Command {
 		Long:  "Spawns the given command in a PTY, shows a QR code for phone pairing, and bridges terminal I/O over WebRTC.",
 		Example: `  poopilot run claude
   poopilot run claude -- --model opus
-  poopilot run codex`,
+  poopilot run --relay https://poopilot-relay.workers.dev claude`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runCommand,
 	}
@@ -148,26 +151,32 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	// Get local IP
 	localIP := getLocalIP()
 
-	// Start HTTP server
+	// Start HTTP server (always, for LAN fallback)
 	srv := startHTTPServer(localIP, port, pm)
 	defer srv.Close()
 
-	// QR encodes just the URL
-	pairURL := fmt.Sprintf("http://%s:%d", localIP, port)
+	localURL := fmt.Sprintf("http://%s:%d", localIP, port)
+
+	// Banner
 	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════╗")
-	fmt.Println("║   Scan QR to connect from phone      ║")
-	fmt.Println("╚══════════════════════════════════════╝")
+	fmt.Println("  💩 \033[1mpoopilot\033[0m " + Version)
+	fmt.Println()
+	fmt.Println("  \033[2mWrapping:\033[0m  " + command)
+	fmt.Println("  \033[2mNetwork:\033[0m   " + localIP + ":" + fmt.Sprint(port))
+	fmt.Println("  \033[2mProtocol:\033[0m  P2P WebRTC (DTLS encrypted)")
 	fmt.Println()
 
-	qrStr, err := qr.RenderToTerminal(pairURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "QR generation failed: %v\n", err)
+	if relayURL != "" {
+		// Cloud relay mode
+		err := startRelaySignaling(ctx, pm, relayURL, localURL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  \033[31mRelay error: %v\033[0m\n", err)
+			fmt.Println("  \033[2mFalling back to local-only mode.\033[0m")
+			printLocalQR(localURL)
+		}
 	} else {
-		fmt.Print(qrStr)
+		printLocalQR(localURL)
 	}
-
-	fmt.Printf("Open: %s\n\n", pairURL)
 
 	// Put local terminal in raw mode
 	fd := int(os.Stdin.Fd())
@@ -203,6 +212,78 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localURL string) error {
+	// Generate room ID
+	roomBytes := make([]byte, 6)
+	if _, err := rand.Read(roomBytes); err != nil {
+		return err
+	}
+	roomID := hex.EncodeToString(roomBytes)
+
+	// Create offer
+	offer, err := pm.newOffer()
+	if err != nil {
+		return fmt.Errorf("create offer: %w", err)
+	}
+
+	// Upload offer to relay
+	if err := relay.PostOffer(relayURL, roomID, offer); err != nil {
+		return fmt.Errorf("upload offer: %w", err)
+	}
+
+	// QR URL points to relay with room ID
+	pairURL := fmt.Sprintf("%s/#room=%s", relayURL, roomID)
+
+	fmt.Println("  \033[33mScan QR with your phone to connect:\033[0m")
+	fmt.Println("  \033[2m(works from any network)\033[0m")
+	fmt.Println()
+
+	qrStr, err := qr.RenderToTerminal(pairURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  QR generation failed: %v\n", err)
+	} else {
+		fmt.Print(qrStr)
+	}
+
+	fmt.Printf("  \033[2mRemote:\033[0m %s\n", pairURL)
+	fmt.Printf("  \033[2mLocal:\033[0m  %s\n", localURL)
+	fmt.Println()
+	fmt.Println("  \033[2mWaiting for phone... (Ctrl+C to quit)\033[0m")
+	fmt.Println()
+
+	// Poll for answer in background
+	go func() {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer pollCancel()
+
+		answer, err := relay.PollAnswer(pollCtx, relayURL, roomID)
+		if err != nil {
+			return
+		}
+		pm.acceptAnswer(answer)
+	}()
+
+	return nil
+}
+
+func printLocalQR(localURL string) {
+	fmt.Println("  \033[33mScan QR with your phone to connect:\033[0m")
+	fmt.Println("  \033[2m(phone must be on same network)\033[0m")
+	fmt.Println()
+
+	qrStr, err := qr.RenderToTerminal(localURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  QR generation failed: %v\n", err)
+	} else {
+		fmt.Print(qrStr)
+	}
+
+	fmt.Printf("  \033[2mOr open:\033[0m %s\n", localURL)
+	fmt.Println()
+	fmt.Println("  \033[2mWaiting for phone... (Ctrl+C to quit)\033[0m")
+	fmt.Println()
 }
 
 func startHTTPServer(host string, port int, pm *peerManager) *http.Server {
