@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poopilot-v5';
+const CACHE_NAME = 'poopilot-v6';
 const SHELL_URLS = [
   '/',
   '/index.html',
@@ -39,16 +39,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    fetch(event.request)
-      .then((resp) => {
-        const clone = resp.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        return resp;
-      })
-      .catch(() =>
-        caches.match(event.request).then((cached) =>
-          cached || new Response('Offline', { status: 503 })
-        )
-      )
+    caches.match(event.request).then((cached) => {
+      // Return cache immediately, update in background
+      const fetchPromise = fetch(event.request)
+        .then((resp) => {
+          const clone = resp.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return resp;
+        })
+        .catch(() => null);
+
+      return cached || fetchPromise.then((resp) =>
+        resp || new Response('Offline', { status: 503 })
+      );
+    })
   );
 });
