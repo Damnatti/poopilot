@@ -7,8 +7,8 @@ LDFLAGS := -s -w -X github.com/Damnatti/poopilot/internal/cli.Version=$(VERSION)
 build:
 	$(GO) build -ldflags '$(LDFLAGS)' -o bin/poopilot ./cmd/poopilot
 
-install:
-	$(GO) install -ldflags '$(LDFLAGS)' ./cmd/poopilot
+install: build
+	cp bin/poopilot /usr/local/bin/poopilot
 
 test:
 	$(GO) test ./internal/... -v -race -count=1

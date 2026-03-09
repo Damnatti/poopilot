@@ -31,26 +31,14 @@ Scan. Connect. Approve from anywhere.
 
 ## Install
 
-### Homebrew (macOS)
-
-```bash
-brew install denismelnikov/tap/poopilot
-```
-
-### Go
-
-```bash
-go install github.com/Damnatti/poopilot/cmd/poopilot@latest
-```
-
-### From source
-
 ```bash
 git clone https://github.com/Damnatti/poopilot.git
 cd poopilot
 make build
-# binary is in ./bin/poopilot
+sudo cp bin/poopilot /usr/local/bin/
 ```
+
+> **Why not `go install @latest`?** The binary embeds a PWA via `go:embed`, which requires a local clone. This is a Go limitation for modules with embedded assets.
 
 ## Usage
 
@@ -59,7 +47,7 @@ make build
 poopilot run claude
 
 # Any network — uses a lightweight relay for the initial handshake
-poopilot run --relay https://poopilot-relay.workers.dev claude
+poopilot run --relay https://your-relay.workers.dev claude
 
 # Pass args to the wrapped tool
 poopilot run -- claude --model opus
@@ -190,7 +178,7 @@ A: You know exactly why.
 make test          # Run all tests with race detector
 make test-cover    # Tests + HTML coverage report
 make build         # Build binary to ./bin/poopilot
-make install       # Install to $GOPATH/bin
+make install       # Build + copy to /usr/local/bin
 make lint          # Run golangci-lint
 ```
 
