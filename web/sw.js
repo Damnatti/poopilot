@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poopilot-v4';
+const CACHE_NAME = 'poopilot-v5';
 const SHELL_URLS = [
   '/',
   '/index.html',
