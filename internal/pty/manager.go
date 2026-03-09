@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/denismelnikov/poopilot/internal/protocol"
+	"github.com/Damnatti/poopilot/internal/protocol"
 )
 
 // Manager manages multiple PTY sessions.

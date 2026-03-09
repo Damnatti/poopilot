@@ -1,6 +1,6 @@
 GO := $(shell which go || echo "/usr/local/Cellar/go/1.26.1/bin/go")
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -s -w -X github.com/denismelnikov/poopilot/internal/cli.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/Damnatti/poopilot/internal/cli.Version=$(VERSION)
 
 .PHONY: build install test test-cover lint run clean
 

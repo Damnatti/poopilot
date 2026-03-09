@@ -10,10 +10,10 @@ import (
 
 	pwebrtc "github.com/pion/webrtc/v4"
 
-	"github.com/denismelnikov/poopilot/internal/approval"
-	"github.com/denismelnikov/poopilot/internal/protocol"
-	"github.com/denismelnikov/poopilot/internal/pty"
-	rtc "github.com/denismelnikov/poopilot/internal/webrtc"
+	"github.com/Damnatti/poopilot/internal/approval"
+	"github.com/Damnatti/poopilot/internal/protocol"
+	"github.com/Damnatti/poopilot/internal/pty"
+	rtc "github.com/Damnatti/poopilot/internal/webrtc"
 )
 
 // setupLoopback creates two connected peers and returns (offerer, answerer).

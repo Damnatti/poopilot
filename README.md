@@ -40,7 +40,7 @@ brew install denismelnikov/tap/poopilot
 ### Go
 
 ```bash
-go install github.com/denismelnikov/poopilot/cmd/poopilot@latest
+go install github.com/Damnatti/poopilot/cmd/poopilot@latest
 ```
 
 ### From source

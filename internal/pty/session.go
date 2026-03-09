@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/denismelnikov/poopilot/internal/protocol"
+	"github.com/Damnatti/poopilot/internal/protocol"
 	"github.com/google/uuid"
 
 	gopty "github.com/creack/pty"

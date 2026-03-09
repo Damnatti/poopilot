@@ -1,4 +1,4 @@
-module github.com/denismelnikov/poopilot
+module github.com/Damnatti/poopilot
 
 go 1.24.0
 

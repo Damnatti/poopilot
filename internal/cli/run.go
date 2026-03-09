@@ -18,12 +18,12 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/denismelnikov/poopilot/internal/approval"
-	"github.com/denismelnikov/poopilot/internal/bridge"
-	"github.com/denismelnikov/poopilot/internal/pty"
-	"github.com/denismelnikov/poopilot/internal/qr"
-	"github.com/denismelnikov/poopilot/internal/relay"
-	rtc "github.com/denismelnikov/poopilot/internal/webrtc"
+	"github.com/Damnatti/poopilot/internal/approval"
+	"github.com/Damnatti/poopilot/internal/bridge"
+	"github.com/Damnatti/poopilot/internal/pty"
+	"github.com/Damnatti/poopilot/internal/qr"
+	"github.com/Damnatti/poopilot/internal/relay"
+	rtc "github.com/Damnatti/poopilot/internal/webrtc"
 	"github.com/spf13/cobra"
 )
 

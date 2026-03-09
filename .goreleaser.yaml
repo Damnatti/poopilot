@@ -16,7 +16,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X github.com/denismelnikov/poopilot/internal/cli.Version={{ .Version }}
+      - -s -w -X github.com/Damnatti/poopilot/internal/cli.Version={{ .Version }}
 
 archives:
   - format: tar.gz
@@ -26,7 +26,7 @@ brews:
   - repository:
       owner: denismelnikov
       name: homebrew-tap
-    homepage: https://github.com/denismelnikov/poopilot
+    homepage: https://github.com/Damnatti/poopilot
     description: "Control your AI coding agents from your phone — zero servers, pure P2P"
     license: MIT
     install: |

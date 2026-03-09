@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denismelnikov/poopilot/internal/approval"
-	"github.com/denismelnikov/poopilot/internal/protocol"
-	"github.com/denismelnikov/poopilot/internal/pty"
-	rtc "github.com/denismelnikov/poopilot/internal/webrtc"
+	"github.com/Damnatti/poopilot/internal/approval"
+	"github.com/Damnatti/poopilot/internal/protocol"
+	"github.com/Damnatti/poopilot/internal/pty"
+	rtc "github.com/Damnatti/poopilot/internal/webrtc"
 	"github.com/google/uuid"
 )
 
