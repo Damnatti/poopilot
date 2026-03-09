@@ -54,6 +54,48 @@ header {
 .status-warning { background: #9e6a0333; color: #d29922; }
 .status-error { background: #f8514933; color: #ff7b72; }
 
+/* Host tabs (multiple poopilot instances) */
+#host-tabs {
+  display: flex;
+  gap: 0;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.host-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #161b22;
+  border: none;
+  border-right: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.host-tab.active {
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+.host-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6e7681;
+  flex-shrink: 0;
+}
+
+.host-dot.connected {
+  background: #3fb950;
+}
+
 /* Session tabs */
 #session-tabs {
   display: flex;

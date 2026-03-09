@@ -167,7 +167,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 	if relayURL != "" {
 		// Cloud relay mode
-		err := startRelaySignaling(ctx, pm, relayURL, localURL)
+		err := startRelaySignaling(ctx, pm, relayURL, localURL, command)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  \033[31mRelay error: %v\033[0m\n", err)
 			fmt.Println("  \033[2mFalling back to local-only mode.\033[0m")
@@ -213,19 +213,19 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func stableRoomID() string {
+func stableRoomID(portNum int) string {
 	hostname, _ := os.Hostname()
 	username := os.Getenv("USER")
 	if username == "" {
 		username = os.Getenv("USERNAME")
 	}
-	raw := fmt.Sprintf("poopilot:%s:%s", hostname, username)
+	raw := fmt.Sprintf("poopilot:%s:%s:%d", hostname, username, portNum)
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))
 	return hash[:12]
 }
 
-func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localURL string) error {
-	roomID := stableRoomID()
+func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localURL, command string) error {
+	roomID := stableRoomID(port)
 
 	// Create offer
 	offer, err := pm.newOffer()
@@ -238,8 +238,8 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 		return fmt.Errorf("upload offer: %w", err)
 	}
 
-	// QR URL points to relay with room ID
-	pairURL := fmt.Sprintf("%s/#room=%s", relayURL, roomID)
+	// QR URL points to relay with room ID and command name
+	pairURL := fmt.Sprintf("%s/#room=%s&name=%s", relayURL, roomID, command)
 
 	fmt.Println("  \033[33mScan QR with your phone to connect:\033[0m")
 	fmt.Println("  \033[2m(works from any network)\033[0m")
