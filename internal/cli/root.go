@@ -30,9 +30,10 @@ No accounts. Just scan a QR code.`,
 
 	root.PersistentFlags().IntVarP(&port, "port", "p", 9876, "HTTP port for pairing")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	root.PersistentFlags().StringVar(&relayURL, "relay", "", "relay server URL for cross-network pairing (e.g. https://poopilot-relay.workers.dev)")
+	root.PersistentFlags().StringVar(&relayURL, "relay", os.Getenv("POOPILOT_RELAY"), "relay server URL (or set POOPILOT_RELAY env var)")
 
 	root.AddCommand(newRunCmd())
+	root.AddCommand(newSetupCmd())
 	root.AddCommand(newVersionCmd())
 
 	return root

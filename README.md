@@ -106,17 +106,29 @@ Your terminal works exactly as before — same input, same output. But now your 
 | **Local** | *(default)* | Same WiFi / VPN | QR points to local IP, no external services |
 | **Relay** | `--relay <url>` | Any network | Handshake goes through a [Cloudflare Worker](relay/), terminal data still P2P |
 
-### Self-hosting the relay
+### Setting up a relay
 
 The relay is a tiny Cloudflare Worker (~50 lines) that stores offer/answer blobs in KV with a 5-minute TTL. No terminal data ever touches it.
 
+**Guided setup:**
+
 ```bash
-cd relay
-npx wrangler kv namespace create ROOMS    # create KV, paste ID into wrangler.toml
-npx wrangler deploy                        # deploy to your CF account (free)
+poopilot setup
 ```
 
-Then use your own URL: `poopilot run --relay https://your-relay.workers.dev claude`
+This walks you through deploying the relay and configuring the env var. Or do it manually:
+
+**One-click deploy:**
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Damnatti/poopilot/tree/main/relay)
+
+Then save your relay URL:
+
+```bash
+echo 'export POOPILOT_RELAY=https://your-relay.workers.dev' >> ~/.zshrc
+source ~/.zshrc
+poopilot setup  # verify it works
+```
 
 ## Requirements
 

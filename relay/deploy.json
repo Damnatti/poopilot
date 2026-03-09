@@ -1,0 +1,13 @@
+{
+  "$schema": "https://workers.cloudflare.com/schemas/deploy.json",
+  "name": "poopilot-relay",
+  "description": "Signaling relay for poopilot — stores WebRTC handshake data (offer/answer) in KV with 5-minute TTL. No terminal data ever touches this server.",
+  "main": "worker.js",
+  "compatibility_date": "2024-01-01",
+  "kv_namespaces": [
+    {
+      "binding": "ROOMS",
+      "title": "poopilot-rooms"
+    }
+  ]
+}

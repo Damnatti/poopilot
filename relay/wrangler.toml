@@ -4,4 +4,4 @@ compatibility_date = "2024-01-01"
 
 [[kv_namespaces]]
 binding = "ROOMS"
-id = "" # fill after `wrangler kv namespace create ROOMS`
+id = "e83e75aa53974e1f919b8575d54bf985"
