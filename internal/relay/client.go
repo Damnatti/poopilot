@@ -10,9 +10,16 @@ import (
 	"time"
 )
 
-// PostOffer uploads the compressed offer SDP to the relay.
+// PostOffer uploads the compressed offer SDP to the relay and clears any stale answer.
 func PostOffer(relayURL, roomID, offer string) error {
-	url := fmt.Sprintf("%s/relay/%s/offer", strings.TrimRight(relayURL, "/"), roomID)
+	base := strings.TrimRight(relayURL, "/")
+
+	// Clear stale answer first
+	delURL := fmt.Sprintf("%s/relay/%s/answer", base, roomID)
+	delReq, _ := http.NewRequest("DELETE", delURL, nil)
+	http.DefaultClient.Do(delReq)
+
+	url := fmt.Sprintf("%s/relay/%s/offer", base, roomID)
 	req, err := http.NewRequest("PUT", url, strings.NewReader(offer))
 	if err != nil {
 		return err

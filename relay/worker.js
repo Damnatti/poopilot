@@ -40,6 +40,14 @@ async function handleRequest(request, env) {
       return json({ ok: true });
     }
 
+    // DELETE /relay/:room/answer (clear stale answer)
+    const delMatch = path.match(/^\/relay\/([a-zA-Z0-9_-]+)\/(offer|answer)$/);
+    if (delMatch && request.method === 'DELETE') {
+      const [, room, type] = delMatch;
+      await env.ROOMS.delete(`${room}:${type}`);
+      return json({ ok: true });
+    }
+
     // GET /relay/:room/offer
     // GET /relay/:room/answer
     const getMatch = path.match(/^\/relay\/([a-zA-Z0-9_-]+)\/(offer|answer)$/);
@@ -65,7 +73,7 @@ function json(data, status = 200) {
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 }
