@@ -3,6 +3,7 @@ package webrtc
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -202,28 +203,17 @@ func (p *Peer) PeerConnection() *webrtc.PeerConnection {
 }
 
 // WaitDisconnect blocks until the peer disconnects, fails, or closes.
+// Uses polling to avoid interfering with OnStateChange callbacks.
 func (p *Peer) WaitDisconnect() {
-	ch := make(chan struct{})
-	p.mu.Lock()
-	prev := p.onStateChange
-	p.onStateChange = func(s PeerState) {
-		if prev != nil {
-			prev(s)
-		}
+	for {
+		p.mu.RLock()
+		s := p.state
+		p.mu.RUnlock()
 		if s == PeerStateDisconnected || s == PeerStateFailed || s == PeerStateClosed {
-			select {
-			case ch <- struct{}{}:
-			default:
-			}
+			return
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	// Already disconnected?
-	if p.state == PeerStateDisconnected || p.state == PeerStateFailed || p.state == PeerStateClosed {
-		p.mu.Unlock()
-		return
-	}
-	p.mu.Unlock()
-	<-ch
 }
 
 // Close closes the peer connection and all channels.

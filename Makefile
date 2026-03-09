@@ -8,7 +8,7 @@ build:
 	$(GO) build -ldflags '$(LDFLAGS)' -o bin/poopilot ./cmd/poopilot
 
 install: build
-	cp bin/poopilot /usr/local/bin/poopilot
+	cp bin/poopilot $(shell go env GOPATH)/bin/poopilot
 
 test:
 	$(GO) test ./internal/... -v -race -count=1
