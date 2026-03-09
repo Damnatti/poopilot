@@ -10,16 +10,24 @@ import (
 var (
 	port    int
 	verbose bool
+
+	// Set via ldflags at build time.
+	Version = "dev"
 )
 
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "poopilot",
 		Short: "Control AI CLI agents from your phone",
-		Long:  "poopilot wraps CLI tools (Claude, Codex, etc.) and lets you monitor and approve actions from your phone via P2P WebRTC.",
+		Long: `💩 poopilot — control AI coding agents from your phone.
+
+Wraps any CLI tool (Claude, Codex, Aider, etc.) in a PTY and lets you
+monitor terminal output and approve actions from your phone via P2P WebRTC.
+
+No servers. No accounts. Just scan a QR code.`,
 	}
 
-	root.PersistentFlags().IntVarP(&port, "port", "p", 9876, "HTTP port for PWA serving during pairing")
+	root.PersistentFlags().IntVarP(&port, "port", "p", 9876, "HTTP port for pairing")
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
 	root.AddCommand(newRunCmd())
@@ -40,7 +48,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("poopilot v0.1.0")
+			fmt.Printf("poopilot %s\n", Version)
 		},
 	}
 }

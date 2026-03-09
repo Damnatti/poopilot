@@ -1,9 +1,14 @@
 GO := $(shell which go || echo "/usr/local/Cellar/go/1.26.1/bin/go")
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -s -w -X github.com/denismelnikov/poopilot/internal/cli.Version=$(VERSION)
 
-.PHONY: build test test-cover lint run clean
+.PHONY: build install test test-cover lint run clean
 
 build:
-	$(GO) build -o bin/poopilot ./cmd/poopilot
+	$(GO) build -ldflags '$(LDFLAGS)' -o bin/poopilot ./cmd/poopilot
+
+install:
+	$(GO) install -ldflags '$(LDFLAGS)' ./cmd/poopilot
 
 test:
 	$(GO) test ./internal/... -v -race -count=1
@@ -16,7 +21,7 @@ lint:
 	golangci-lint run ./...
 
 run:
-	$(GO) run ./cmd/poopilot run -- $(CMD)
+	$(GO) run -ldflags '$(LDFLAGS)' ./cmd/poopilot run -- $(CMD)
 
 clean:
 	rm -rf bin/ coverage.out coverage.html
