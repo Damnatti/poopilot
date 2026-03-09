@@ -45,9 +45,19 @@ class App {
 
     this.showStatus('Connecting...', 'info');
 
-    // Check for relay room ID in URL hash
+    // Check for relay room ID in URL hash or localStorage
     const params = new URLSearchParams(location.hash.slice(1));
     this.roomId = params.get('room');
+
+    // Save room ID for future reconnects (e.g. PWA from home screen)
+    if (this.roomId) {
+      localStorage.setItem('poopilot_room', this.roomId);
+      localStorage.setItem('poopilot_relay', location.origin);
+    } else {
+      // Try saved room (PWA reopened from home screen)
+      this.roomId = localStorage.getItem('poopilot_room');
+      this._savedRelay = localStorage.getItem('poopilot_relay');
+    }
 
     if (this.roomId) {
       this.log(`Relay mode, room: ${this.roomId}`);

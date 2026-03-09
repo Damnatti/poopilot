@@ -2,8 +2,7 @@ package cli
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -214,13 +213,19 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localURL string) error {
-	// Generate room ID
-	roomBytes := make([]byte, 6)
-	if _, err := rand.Read(roomBytes); err != nil {
-		return err
+func stableRoomID() string {
+	hostname, _ := os.Hostname()
+	username := os.Getenv("USER")
+	if username == "" {
+		username = os.Getenv("USERNAME")
 	}
-	roomID := hex.EncodeToString(roomBytes)
+	raw := fmt.Sprintf("poopilot:%s:%s", hostname, username)
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))
+	return hash[:12]
+}
+
+func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localURL string) error {
+	roomID := stableRoomID()
 
 	// Create offer
 	offer, err := pm.newOffer()
@@ -253,16 +258,29 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 	fmt.Println("  \033[2mWaiting for phone... (Ctrl+C to quit)\033[0m")
 	fmt.Println()
 
-	// Poll for answer in background
+	// Poll for answer — keep re-uploading offer for reconnects
 	go func() {
-		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Minute)
-		defer pollCancel()
+		for {
+			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Minute)
+			answer, err := relay.PollAnswer(pollCtx, relayURL, roomID)
+			pollCancel()
 
-		answer, err := relay.PollAnswer(pollCtx, relayURL, roomID)
-		if err != nil {
-			return
+			if ctx.Err() != nil {
+				return // main context cancelled
+			}
+			if err != nil {
+				continue
+			}
+			pm.acceptAnswer(answer)
+
+			// Re-upload a fresh offer for next reconnect
+			time.Sleep(2 * time.Second)
+			newOffer, err := pm.newOffer()
+			if err != nil {
+				continue
+			}
+			relay.PostOffer(relayURL, roomID, newOffer)
 		}
-		pm.acceptAnswer(answer)
 	}()
 
 	return nil
