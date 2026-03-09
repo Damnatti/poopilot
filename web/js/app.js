@@ -107,6 +107,7 @@ class HostConnection {
       this.app.log(`ICE [${this.hostInfo.name}]: ${state}`);
       if (state === 'connected') {
         this.connected = true;
+        if (this._pairTimeout) { clearTimeout(this._pairTimeout); this._pairTimeout = null; }
         if (this.app.activeHostId === this.hostInfo.roomId || !this.hostInfo.roomId) {
           this.app.showStatus('Connected', 'success');
         }
@@ -161,6 +162,13 @@ class HostConnection {
 
       if (resp.ok) {
         this.app.showStatus('Paired, waiting for data...', 'info');
+        // Auto-reconnect if no data after 15s
+        this._pairTimeout = setTimeout(() => {
+          if (!this.connected) {
+            this.app.log('Pair timeout — reconnecting');
+            this.connect();
+          }
+        }, 15000);
       } else {
         const text = await resp.text();
         this.app.showStatus(`Pair error: ${text}`, 'error');
@@ -589,14 +597,11 @@ class App {
     el.textContent = text;
     el.className = `status status-${level}`;
 
-    if (level === 'warning' || level === 'error') {
-      el.onclick = () => {
-        const host = this.getActiveHost();
-        if (host) host.connect();
-      };
-    } else {
-      el.onclick = null;
-    }
+    // Always allow tap to reconnect
+    el.onclick = () => {
+      const host = this.getActiveHost();
+      if (host) host.connect();
+    };
   }
 
   log(msg) {

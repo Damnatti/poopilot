@@ -258,7 +258,7 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 	fmt.Println("  \033[2mWaiting for phone... (Ctrl+C to quit)\033[0m")
 	fmt.Println()
 
-	// Poll for answer — keep re-uploading offer for reconnects
+	// Poll for answer — wait for disconnect before re-offering
 	go func() {
 		for {
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -271,10 +271,23 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 			if err != nil {
 				continue
 			}
+
+			pm.mu.Lock()
+			peer := pm.peer
+			pm.mu.Unlock()
+
 			pm.acceptAnswer(answer)
 
-			// Re-upload a fresh offer for next reconnect
-			time.Sleep(2 * time.Second)
+			// Wait for this connection to drop before creating a new offer
+			if peer != nil {
+				peer.WaitDisconnect()
+			}
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			// Connection dropped — create fresh offer for reconnect
 			newOffer, err := pm.newOffer()
 			if err != nil {
 				continue

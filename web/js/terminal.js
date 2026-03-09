@@ -42,6 +42,16 @@ class TerminalSession {
     this.term.open(this.container);
     this.fitAddon.fit();
 
+    // Fix iOS keyboard: disable autocorrect/suggestions on xterm's hidden textarea
+    const textarea = this.container.querySelector('.xterm-helper-textarea');
+    if (textarea) {
+      textarea.setAttribute('autocapitalize', 'none');
+      textarea.setAttribute('autocorrect', 'off');
+      textarea.setAttribute('autocomplete', 'off');
+      textarea.setAttribute('spellcheck', 'false');
+      textarea.setAttribute('enterkeyhint', 'send');
+    }
+
     this.term.onData((data) => {
       if (this._onInput) {
         this._onInput(new TextEncoder().encode(data));

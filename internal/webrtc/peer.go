@@ -201,6 +201,31 @@ func (p *Peer) PeerConnection() *webrtc.PeerConnection {
 	return p.pc
 }
 
+// WaitDisconnect blocks until the peer disconnects, fails, or closes.
+func (p *Peer) WaitDisconnect() {
+	ch := make(chan struct{})
+	p.mu.Lock()
+	prev := p.onStateChange
+	p.onStateChange = func(s PeerState) {
+		if prev != nil {
+			prev(s)
+		}
+		if s == PeerStateDisconnected || s == PeerStateFailed || s == PeerStateClosed {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}
+	}
+	// Already disconnected?
+	if p.state == PeerStateDisconnected || p.state == PeerStateFailed || p.state == PeerStateClosed {
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Unlock()
+	<-ch
+}
+
 // Close closes the peer connection and all channels.
 func (p *Peer) Close() error {
 	p.mu.Lock()
