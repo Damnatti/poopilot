@@ -202,13 +202,27 @@ func (p *Peer) PeerConnection() *webrtc.PeerConnection {
 	return p.pc
 }
 
-// WaitDisconnect blocks until the peer disconnects, fails, or closes.
-// Uses polling to avoid interfering with OnStateChange callbacks.
+// WaitDisconnect blocks until the peer disconnects, fails, closes, or
+// fails to connect within 30 seconds.
 func (p *Peer) WaitDisconnect() {
+	deadline := time.After(30 * time.Second)
+	connected := false
 	for {
+		select {
+		case <-deadline:
+			if !connected {
+				return // never connected, give up
+			}
+			// Was connected, keep waiting
+			deadline = time.After(5 * time.Minute)
+		default:
+		}
 		p.mu.RLock()
 		s := p.state
 		p.mu.RUnlock()
+		if s == PeerStateConnected {
+			connected = true
+		}
 		if s == PeerStateDisconnected || s == PeerStateFailed || s == PeerStateClosed {
 			return
 		}
