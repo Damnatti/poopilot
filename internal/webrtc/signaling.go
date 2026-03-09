@@ -12,15 +12,27 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+// TURNCredentials holds ephemeral TURN auth info.
+type TURNCredentials struct {
+	URLs       []string `json:"u"`
+	Username   string   `json:"n"`
+	Credential string   `json:"c"`
+}
+
 // SignalingPayload is the data encoded in the QR code.
 type SignalingPayload struct {
-	SDP         string   `json:"s"`
-	STUNServers []string `json:"u,omitempty"`
+	SDP         string           `json:"s"`
+	STUNServers []string         `json:"u,omitempty"`
+	TURN        *TURNCredentials `json:"t,omitempty"`
 }
 
 // CreateOffer creates an SDP offer with all ICE candidates gathered.
-// It waits up to gatherTimeout for ICE gathering to complete.
 func CreateOffer(p *Peer, gatherTimeout time.Duration) (string, error) {
+	return CreateOfferWithTURN(p, gatherTimeout, nil)
+}
+
+// CreateOfferWithTURN creates an SDP offer and embeds TURN credentials in the payload.
+func CreateOfferWithTURN(p *Peer, gatherTimeout time.Duration, turn *TURNCredentials) (string, error) {
 	offer, err := p.pc.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("create offer: %w", err)
@@ -44,7 +56,8 @@ func CreateOffer(p *Peer, gatherTimeout time.Duration) (string, error) {
 	}
 
 	payload := SignalingPayload{
-		SDP: localDesc.SDP,
+		SDP:  localDesc.SDP,
+		TURN: turn,
 	}
 
 	return CompressPayload(payload)

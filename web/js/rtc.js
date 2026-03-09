@@ -1,10 +1,11 @@
 // WebRTC client for phone side.
 class RTCClient {
-  constructor(stunServers) {
+  constructor(stunServers, turnConfig) {
     this.stunServers = stunServers || [
       'stun:stun.l.google.com:19302',
       'stun:stun1.l.google.com:19302',
     ];
+    this.turnConfig = turnConfig || null; // { u: [urls], n: username, c: credential }
     this.pc = null;
     this.channels = {};
     this._onMessage = null;
@@ -13,9 +14,15 @@ class RTCClient {
   }
 
   async acceptOffer(offerSDP) {
-    this.pc = new RTCPeerConnection({
-      iceServers: [{ urls: this.stunServers }],
-    });
+    const iceServers = [{ urls: this.stunServers }];
+    if (this.turnConfig) {
+      iceServers.push({
+        urls: this.turnConfig.u,
+        username: this.turnConfig.n,
+        credential: this.turnConfig.c,
+      });
+    }
+    this.pc = new RTCPeerConnection({ iceServers });
 
     this.pc.oniceconnectionstatechange = () => {
       if (this._onStateChange) {

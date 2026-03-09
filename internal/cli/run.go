@@ -50,6 +50,7 @@ type peerManager struct {
 	peer     *rtc.Peer
 	br       *bridge.Bridge
 	ctx      context.Context
+	turnCfg  *rtc.TURNConfig
 }
 
 func (pm *peerManager) newOffer() (string, error) {
@@ -61,7 +62,19 @@ func (pm *peerManager) newOffer() (string, error) {
 		pm.peer.Close()
 	}
 
-	peer, err := rtc.NewPeer(rtc.PeerConfig{})
+	peerCfg := rtc.PeerConfig{}
+
+	// Add TURN if configured
+	var turnCreds *rtc.TURNCredentials
+	if pm.turnCfg != nil {
+		urls, user, cred := rtc.GenerateTURNCredentials(*pm.turnCfg)
+		peerCfg.TURNServers = urls
+		peerCfg.TURNUser = user
+		peerCfg.TURNCred = cred
+		turnCreds = &rtc.TURNCredentials{URLs: urls, Username: user, Credential: cred}
+	}
+
+	peer, err := rtc.NewPeer(peerCfg)
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +85,7 @@ func (pm *peerManager) newOffer() (string, error) {
 		return "", err
 	}
 
-	offer, err := rtc.CreateOffer(peer, 5*time.Second)
+	offer, err := rtc.CreateOfferWithTURN(peer, 5*time.Second, turnCreds)
 	if err != nil {
 		peer.Close()
 		return "", err
@@ -144,6 +157,13 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		mgr:      mgr,
 		detector: approval.NewDetector(),
 		ctx:      ctx,
+	}
+
+	// Configure TURN if env vars set
+	turnSecret := os.Getenv("POOPILOT_TURN_SECRET")
+	turnHost := os.Getenv("POOPILOT_TURN_HOST")
+	if turnSecret != "" && turnHost != "" {
+		pm.turnCfg = &rtc.TURNConfig{Host: turnHost, Secret: turnSecret}
 	}
 	defer pm.close()
 

@@ -333,7 +333,7 @@ class App {
     const hostKey = this._activeKey;
     const ctx = this._ctx;
 
-    this.rtc = new RTCClient();
+    this.rtc = new RTCClient(null, offerPayload.t || null);
     const rtc = this.rtc; // capture reference
 
     rtc.onMessage((label, data) => {

@@ -48,6 +48,9 @@ var DefaultSTUNServers = []string{
 // PeerConfig configures the WebRTC peer connection.
 type PeerConfig struct {
 	STUNServers []string
+	TURNServers []string
+	TURNUser    string
+	TURNCred    string
 }
 
 // Peer wraps a WebRTC PeerConnection with data channel management.
@@ -72,6 +75,14 @@ func NewPeer(config PeerConfig) (*Peer, error) {
 
 	iceServers := []webrtc.ICEServer{
 		{URLs: stunServers},
+	}
+
+	if len(config.TURNServers) > 0 && config.TURNUser != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       config.TURNServers,
+			Username:   config.TURNUser,
+			Credential: config.TURNCred,
+		})
 	}
 
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
