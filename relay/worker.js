@@ -5,6 +5,15 @@
 
 export default {
   async fetch(request, env) {
+    try {
+      return await handleRequest(request, env);
+    } catch (e) {
+      return json({ error: e.message, stack: e.stack }, 500);
+    }
+  },
+};
+
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -44,8 +53,7 @@ export default {
     }
 
     return json({ error: 'not found' }, 404);
-  },
-};
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {

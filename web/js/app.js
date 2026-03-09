@@ -3,43 +3,67 @@ import { TerminalSession } from './terminal.js';
 import { ApprovalManager } from './approval.js';
 import { MsgType, encode, decode, encodeJSON, decodeJSON } from './protocol.js';
 
-/**
- * A single host connection — one poopilot instance.
- * Each host has its own WebRTC peer, terminal sessions, and state.
- */
-class HostConnection {
-  constructor(app, hostInfo) {
-    this.app = app;
-    this.hostInfo = hostInfo; // { roomId, relay, name }
+class App {
+  constructor() {
     this.rtc = null;
     this.sessions = new Map();
     this.activeSession = null;
-    this.connected = false;
+    this.approvals = null;
+    this.msgCount = 0;
   }
 
-  cleanup() {
-    for (const [id, term] of this.sessions) {
-      term.dispose();
-      const el = document.getElementById(`term-${this.hostInfo.roomId}-${id}`);
-      if (el) el.remove();
-    }
-    this.sessions.clear();
-    this.activeSession = null;
-    this.connected = false;
+  async init() {
+    this.log('init');
+    this.approvals = new ApprovalManager(document.getElementById('approvals'));
+    this.approvals.onResponse((id, approved) => {
+      const msg = encodeJSON(MsgType.APPROVAL_RESP, { id, approved });
+      this.rtc?.sendOnChannel('control', msg);
+    });
 
-    if (this.rtc) {
-      this.rtc.close();
-      this.rtc = null;
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
+
+    // Triple-tap to toggle debug log
+    let tapCount = 0;
+    document.getElementById('header').addEventListener('click', () => {
+      tapCount++;
+      setTimeout(() => { tapCount = 0; }, 500);
+      if (tapCount >= 3) {
+        const dbg = document.getElementById('debug-log');
+        if (dbg) dbg.classList.toggle('visible');
+        tapCount = 0;
+      }
+    });
+
+    await this.connect();
   }
 
   async connect() {
+    // Clean up previous connection
     this.cleanup();
-    this.app.showStatus('Connecting...', 'info');
 
-    if (this.hostInfo.roomId) {
-      await this.connectViaRelay();
+    this.showStatus('Connecting...', 'info');
+
+    // Check for relay room ID in URL hash or localStorage
+    const params = new URLSearchParams(location.hash.slice(1));
+    this.roomId = params.get('room');
+
+    // Save room ID for future reconnects (e.g. PWA from home screen)
+    if (this.roomId) {
+      localStorage.setItem('poopilot_room', this.roomId);
+      localStorage.setItem('poopilot_relay', location.origin);
     } else {
+      // Try saved room (PWA reopened from home screen)
+      this.roomId = localStorage.getItem('poopilot_room');
+      this._savedRelay = localStorage.getItem('poopilot_relay');
+    }
+
+    if (this.roomId) {
+      this.log(`Relay mode, room: ${this.roomId}`);
+      await this.connectViaRelay(this.roomId);
+    } else {
+      this.log('Local mode');
       await this.connectLocal();
     }
   }
@@ -48,111 +72,115 @@ class HostConnection {
     try {
       const resp = await fetch('/offer');
       if (!resp.ok) {
-        this.app.showStatus(`Server error: ${resp.status}`, 'error');
+        this.showStatus(`Server error: ${resp.status}`, 'error');
         return;
       }
       const data = await resp.json();
       if (data.error) {
-        this.app.showStatus(`Offer error: ${data.error}`, 'error');
+        this.showStatus(`Offer error: ${data.error}`, 'error');
         return;
       }
-      this.app.log(`Offer: ${data.offer?.length} chars`);
-      await this.startPairing(data.offer, null);
+      this.log(`Offer: ${data.offer?.length} chars`);
+      await this.startPairing(data.offer);
     } catch (e) {
-      this.app.showStatus(`Network error: ${e.message}`, 'error');
+      this.showStatus(`Network error: ${e.message}`, 'error');
     }
   }
 
-  async connectViaRelay() {
-    const roomId = this.hostInfo.roomId;
-    const relay = this.hostInfo.relay;
+  async connectViaRelay(roomId) {
     try {
-      const resp = await fetch(`${relay}/relay/${roomId}/offer`);
+      const baseUrl = `${location.origin}/relay/${roomId}`;
+      const resp = await fetch(`${baseUrl}/offer`);
       if (!resp.ok) {
-        this.app.showStatus('Waiting for host...', 'info');
-        setTimeout(() => {
-          if (this.app.activeHostId === this.hostInfo.roomId) {
-            this.connectViaRelay();
-          }
-        }, 2000);
+        this.showStatus('Waiting for host...', 'info');
+        // Retry after 2s
+        setTimeout(() => this.connectViaRelay(roomId), 2000);
         return;
       }
       const data = await resp.json();
       if (data.error) {
-        this.app.showStatus(`Offer error: ${data.error}`, 'error');
+        this.showStatus(`Offer error: ${data.error}`, 'error');
         return;
       }
-      this.app.log(`Relay offer: ${data.offer?.length} chars`);
-      await this.startPairing(data.offer, relay);
+      this.log(`Relay offer: ${data.offer?.length} chars`);
+      await this.startPairing(data.offer);
     } catch (e) {
-      this.app.showStatus(`Relay error: ${e.message}`, 'error');
+      this.showStatus(`Relay error: ${e.message}`, 'error');
     }
   }
 
-  async startPairing(compressedOffer, relay) {
-    const offerPayload = await this.app.decompress(compressedOffer);
+  cleanup() {
+    // Dispose all terminal sessions
+    for (const [id, term] of this.sessions) {
+      term.dispose();
+      const el = document.getElementById(`term-${id}`);
+      if (el) el.remove();
+    }
+    this.sessions.clear();
+    this.activeSession = null;
+    this.msgCount = 0;
+    document.getElementById('session-tabs').innerHTML = '';
+
+    if (this.rtc) {
+      this.rtc.close();
+      this.rtc = null;
+    }
+  }
+
+  async startPairing(compressedOffer) {
+    const offerPayload = await this.decompress(compressedOffer);
     if (!offerPayload || !offerPayload.s) {
-      this.app.showStatus('Bad offer data', 'error');
-      this.app.log(`Decompress result: ${JSON.stringify(offerPayload)}`);
+      this.showStatus('Bad offer data', 'error');
+      this.log(`Decompress result: ${JSON.stringify(offerPayload)}`);
       return;
     }
 
     this.rtc = new RTCClient();
 
     this.rtc.onMessage((label, data) => {
+      this.msgCount++;
       this.handleMessage(label, data);
     });
 
     this.rtc.onStateChange((state) => {
-      this.app.log(`ICE [${this.hostInfo.name}]: ${state}`);
+      this.log(`ICE: ${state}`);
       if (state === 'connected') {
-        this.connected = true;
-        if (this._pairTimeout) { clearTimeout(this._pairTimeout); this._pairTimeout = null; }
-        if (this.app.activeHostId === this.hostInfo.roomId || !this.hostInfo.roomId) {
-          this.app.showStatus('Connected', 'success');
-        }
-        this.app.updateHostTabs();
+        this.showStatus('Connected', 'success');
       } else if (state === 'disconnected') {
-        this.connected = false;
-        if (this.app.activeHostId === this.hostInfo.roomId || !this.hostInfo.roomId) {
-          this.app.showStatus('Disconnected — tap to reconnect', 'warning');
-        }
-        this.app.updateHostTabs();
+        this.showStatus('Disconnected — tap to reconnect', 'warning');
       } else if (state === 'failed') {
-        this.connected = false;
-        if (this.app.activeHostId === this.hostInfo.roomId || !this.hostInfo.roomId) {
-          this.app.showStatus('Failed — tap to reconnect', 'error');
-        }
-        this.app.updateHostTabs();
+        this.showStatus('Failed — tap to reconnect', 'error');
       }
     });
 
     this.rtc.onChannel((label, dc) => {
-      this.app.log(`Channel "${label}" → ${dc.readyState}`);
+      this.log(`Channel "${label}" → ${dc.readyState}`);
       dc.addEventListener('open', () => {
-        this.app.log(`Channel "${label}" open`);
+        this.log(`Channel "${label}" open`);
       });
     });
 
     try {
-      this.app.showStatus('WebRTC handshake...', 'info');
+      this.showStatus('WebRTC handshake...', 'info');
       const answerSDP = await this.rtc.acceptOffer(offerPayload.s);
-      this.app.log(`Answer: ${answerSDP?.length} chars`);
+      this.log(`Answer: ${answerSDP?.length} chars`);
 
-      const answerCompressed = await this.app.compress({ s: answerSDP });
+      const answerCompressed = await this.compress({ s: answerSDP });
       if (!answerCompressed) {
-        this.app.showStatus('Compress failed', 'error');
+        this.showStatus('Compress failed', 'error');
         return;
       }
 
       let resp;
-      if (this.hostInfo.roomId && relay) {
-        resp = await fetch(`${relay}/relay/${this.hostInfo.roomId}/answer`, {
+      if (this.roomId) {
+        // Relay mode: PUT answer to relay
+        resp = await fetch(`${location.origin}/relay/${this.roomId}/answer`, {
           method: 'PUT',
           headers: { 'Content-Type': 'text/plain' },
           body: answerCompressed,
         });
       } else {
+        // Local mode: POST answer to local server
         resp = await fetch('/answer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,21 +189,21 @@ class HostConnection {
       }
 
       if (resp.ok) {
-        this.app.showStatus('Paired, waiting for data...', 'info');
+        this.showStatus('Paired, waiting for data...', 'info');
         // Auto-reconnect if no data after 15s
         this._pairTimeout = setTimeout(() => {
-          if (!this.connected) {
-            this.app.log('Pair timeout — reconnecting');
+          if (this.rtc?.pc?.iceConnectionState !== 'connected') {
+            this.log('Pair timeout — reconnecting');
             this.connect();
           }
         }, 15000);
       } else {
         const text = await resp.text();
-        this.app.showStatus(`Pair error: ${text}`, 'error');
+        this.showStatus(`Pair error: ${text}`, 'error');
       }
     } catch (e) {
-      this.app.showStatus(`Error: ${e.message}`, 'error');
-      this.app.log(e.stack);
+      this.showStatus(`Error: ${e.message}`, 'error');
+      this.log(e.stack);
     }
   }
 
@@ -198,19 +226,16 @@ class HostConnection {
 
         case MsgType.APPROVAL_REQ: {
           const req = decodeJSON(msg.payload);
-          this.app.approvals.showRequest(req);
-          // Route approval responses through this host's RTC
-          this.app.activeApprovalHost = this;
+          this.approvals.showRequest(req);
           break;
         }
 
         case MsgType.SESSION_LIST: {
           const sessions = decodeJSON(msg.payload);
-          this.app.log(`Sessions [${this.hostInfo.name}]: ${JSON.stringify(sessions.map(s => s.id.slice(0,6) + '/' + s.cmd))}`);
+          this.log(`Sessions: ${JSON.stringify(sessions.map(s => s.id.slice(0,6) + '/' + s.cmd))}`);
           this.updateSessionTabs(sessions);
-          if (this.app.activeHostId === this.hostInfo.roomId || !this.hostInfo.roomId) {
-            this.app.showStatus('Connected', 'success');
-          }
+          this.showStatus('Connected', 'success');
+          if (this._pairTimeout) { clearTimeout(this._pairTimeout); this._pairTimeout = null; }
           break;
         }
 
@@ -219,12 +244,12 @@ class HostConnection {
 
         case MsgType.ERROR: {
           const err = decodeJSON(msg.payload);
-          this.app.showStatus(`Error: ${err.message}`, 'error');
+          this.showStatus(`Error: ${err.message}`, 'error');
           break;
         }
       }
     } catch (e) {
-      this.app.log(`MSG error: ${e.message}`);
+      this.log(`MSG error: ${e.message}`);
     }
   }
 
@@ -233,11 +258,11 @@ class HostConnection {
       return this.sessions.get(sessionId);
     }
 
-    this.app.log(`New terminal [${this.hostInfo.name}]: ${sessionId.slice(0, 8)}`);
+    this.log(`New terminal: ${sessionId.slice(0, 8)}`);
 
     const container = document.createElement('div');
     container.className = 'terminal-pane';
-    container.id = `term-${this.hostInfo.roomId || 'local'}-${sessionId}`;
+    container.id = `term-${sessionId}`;
     document.getElementById('terminals').appendChild(container);
 
     const term = new TerminalSession(sessionId, container);
@@ -255,13 +280,10 @@ class HostConnection {
 
     this.sessions.set(sessionId, term);
 
-    // Show/hide based on whether this host is active
-    const isActiveHost = this.app.activeHostId === this.hostInfo.roomId ||
-                         (!this.hostInfo.roomId && !this.app.activeHostId);
-
-    if (!this.activeSession && isActiveHost) {
+    if (!this.activeSession) {
       this.activeSession = sessionId;
       container.style.display = '';
+      // Fit after next frame to ensure container has size
       requestAnimationFrame(() => {
         term.fit();
         term.focus();
@@ -274,11 +296,6 @@ class HostConnection {
   }
 
   updateSessionTabs(sessions) {
-    // Only render if this is the active host
-    const isActive = this.app.activeHostId === this.hostInfo.roomId ||
-                     (!this.hostInfo.roomId && !this.app.activeHostId);
-    if (!isActive) return;
-
     const tabs = document.getElementById('session-tabs');
     tabs.innerHTML = '';
 
@@ -316,15 +333,12 @@ class HostConnection {
   switchSession(sessionId) {
     if (this.activeSession === sessionId) return;
 
-    // Hide current
-    const currentEl = document.getElementById(`term-${this.hostInfo.roomId || 'local'}-${this.activeSession}`);
-    if (currentEl) currentEl.style.display = 'none';
+    const current = document.getElementById(`term-${this.activeSession}`);
+    if (current) current.style.display = 'none';
 
     this.activeSession = sessionId;
-
-    // Show new
-    const nextEl = document.getElementById(`term-${this.hostInfo.roomId || 'local'}-${sessionId}`);
-    if (nextEl) nextEl.style.display = '';
+    const next = document.getElementById(`term-${sessionId}`);
+    if (next) next.style.display = '';
 
     const term = this.sessions.get(sessionId);
     if (term) {
@@ -337,259 +351,9 @@ class HostConnection {
     const msg = encodeJSON(MsgType.SESSION_SWITCH, { id: sessionId });
     this.rtc?.sendOnChannel('control', msg);
 
-    document.querySelectorAll('#session-tabs .session-tab').forEach((tab) => {
+    document.querySelectorAll('.session-tab').forEach((tab) => {
       tab.classList.toggle('active', tab.dataset.id === sessionId);
     });
-  }
-
-  show() {
-    // Show this host's active terminal, hide all others
-    for (const [id, term] of this.sessions) {
-      const el = document.getElementById(`term-${this.hostInfo.roomId || 'local'}-${id}`);
-      if (el) el.style.display = (id === this.activeSession) ? '' : 'none';
-    }
-    if (this.activeSession) {
-      const term = this.sessions.get(this.activeSession);
-      if (term) {
-        requestAnimationFrame(() => {
-          term.fit();
-          term.focus();
-        });
-      }
-    }
-  }
-
-  hide() {
-    for (const [id, term] of this.sessions) {
-      const el = document.getElementById(`term-${this.hostInfo.roomId || 'local'}-${id}`);
-      if (el) el.style.display = 'none';
-    }
-  }
-}
-
-class App {
-  constructor() {
-    this.hosts = new Map(); // roomId -> HostConnection
-    this.activeHostId = null;
-    this.approvals = null;
-    this.activeApprovalHost = null;
-  }
-
-  async init() {
-    this.log('init');
-    this.approvals = new ApprovalManager(document.getElementById('approvals'));
-    this.approvals.onResponse((id, approved) => {
-      const msg = encodeJSON(MsgType.APPROVAL_RESP, { id, approved });
-      // Send to whichever host triggered the approval
-      const host = this.activeApprovalHost || this.getActiveHost();
-      host?.rtc?.sendOnChannel('control', msg);
-    });
-
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
-    // Triple-tap to toggle debug log
-    let tapCount = 0;
-    document.getElementById('header').addEventListener('click', () => {
-      tapCount++;
-      setTimeout(() => { tapCount = 0; }, 500);
-      if (tapCount >= 3) {
-        const dbg = document.getElementById('debug-log');
-        if (dbg) dbg.classList.toggle('visible');
-        tapCount = 0;
-      }
-    });
-
-    // Load saved hosts
-    this.loadHosts();
-
-    // Check URL for new host
-    this.checkUrlForNewHost();
-
-    // Connect to all known hosts
-    await this.connectAll();
-  }
-
-  loadHosts() {
-    try {
-      const saved = localStorage.getItem('poopilot_hosts');
-      if (saved) {
-        const list = JSON.parse(saved);
-        for (const h of list) {
-          if (h.roomId && !this.hosts.has(h.roomId)) {
-            this.hosts.set(h.roomId, new HostConnection(this, h));
-          }
-        }
-        if (list.length > 0 && !this.activeHostId) {
-          this.activeHostId = list[0].roomId;
-        }
-      } else {
-        // Migrate from old single-host format
-        const oldRoom = localStorage.getItem('poopilot_room');
-        const oldRelay = localStorage.getItem('poopilot_relay');
-        if (oldRoom) {
-          const hostInfo = { roomId: oldRoom, relay: oldRelay || location.origin, name: 'host' };
-          this.hosts.set(oldRoom, new HostConnection(this, hostInfo));
-          this.activeHostId = oldRoom;
-          localStorage.removeItem('poopilot_room');
-          localStorage.removeItem('poopilot_relay');
-          this.saveHosts();
-        }
-      }
-    } catch (e) {
-      this.log(`Load hosts error: ${e.message}`);
-    }
-  }
-
-  saveHosts() {
-    const list = [];
-    for (const [id, host] of this.hosts) {
-      list.push(host.hostInfo);
-    }
-    localStorage.setItem('poopilot_hosts', JSON.stringify(list));
-  }
-
-  checkUrlForNewHost() {
-    const params = new URLSearchParams(location.hash.slice(1));
-    const roomId = params.get('room');
-    const name = params.get('name') || 'unknown';
-
-    if (roomId) {
-      const relay = location.origin;
-      const hostInfo = { roomId, relay, name };
-
-      if (this.hosts.has(roomId)) {
-        // Update name if changed
-        this.hosts.get(roomId).hostInfo.name = name;
-        this.hosts.get(roomId).hostInfo.relay = relay;
-      } else {
-        this.hosts.set(roomId, new HostConnection(this, hostInfo));
-      }
-      this.activeHostId = roomId;
-      this.saveHosts();
-    } else if (!this.hosts.size) {
-      // No saved hosts and no URL param — local mode
-      const hostInfo = { roomId: null, relay: null, name: 'local' };
-      this.hosts.set('local', new HostConnection(this, hostInfo));
-      this.activeHostId = null;
-    }
-  }
-
-  async connectAll() {
-    this.updateHostTabs();
-
-    // Connect the active host first, then others in background
-    const activeHost = this.getActiveHost();
-    if (activeHost) {
-      await activeHost.connect();
-    }
-
-    // Connect remaining hosts in background
-    for (const [id, host] of this.hosts) {
-      const hostId = host.hostInfo.roomId;
-      if (hostId !== this.activeHostId && !(hostId === null && this.activeHostId === null)) {
-        host.connect(); // don't await, let it connect in background
-      }
-    }
-  }
-
-  getActiveHost() {
-    if (this.activeHostId) {
-      return this.hosts.get(this.activeHostId);
-    }
-    // Local mode
-    return this.hosts.get('local');
-  }
-
-  switchHost(hostId) {
-    if (this.activeHostId === hostId) return;
-
-    // Hide current host terminals
-    const current = this.getActiveHost();
-    if (current) current.hide();
-
-    this.activeHostId = hostId;
-
-    // Show new host terminals
-    const next = this.getActiveHost();
-    if (next) {
-      next.show();
-      // Re-render session tabs for this host
-      document.getElementById('session-tabs').innerHTML = '';
-      // Trigger session list refresh by reconnecting if needed
-      if (next.connected) {
-        this.showStatus('Connected', 'success');
-      } else {
-        this.showStatus('Reconnecting...', 'info');
-        next.connect();
-      }
-    }
-
-    this.updateHostTabs();
-  }
-
-  removeHost(hostId) {
-    const host = this.hosts.get(hostId);
-    if (host) {
-      host.cleanup();
-      this.hosts.delete(hostId);
-      this.saveHosts();
-
-      // Switch to another host if we removed the active one
-      if (this.activeHostId === hostId) {
-        const first = this.hosts.keys().next().value;
-        if (first) {
-          this.switchHost(first);
-        }
-      }
-      this.updateHostTabs();
-    }
-  }
-
-  updateHostTabs() {
-    const container = document.getElementById('host-tabs');
-    if (!container) return;
-
-    // Only show host tabs if there are multiple hosts
-    if (this.hosts.size <= 1) {
-      container.style.display = 'none';
-      return;
-    }
-
-    container.style.display = '';
-    container.innerHTML = '';
-
-    for (const [id, host] of this.hosts) {
-      const tab = document.createElement('button');
-      const isActive = id === this.activeHostId ||
-                       (host.hostInfo.roomId === null && this.activeHostId === null);
-      tab.className = 'host-tab' + (isActive ? ' active' : '');
-
-      // Status dot
-      const dot = document.createElement('span');
-      dot.className = 'host-dot' + (host.connected ? ' connected' : '');
-      tab.appendChild(dot);
-
-      const label = document.createTextNode(host.hostInfo.name || id.slice(0, 6));
-      tab.appendChild(label);
-
-      tab.addEventListener('click', () => this.switchHost(id));
-
-      // Long press to remove
-      let pressTimer;
-      tab.addEventListener('touchstart', (e) => {
-        pressTimer = setTimeout(() => {
-          if (confirm(`Remove "${host.hostInfo.name}"?`)) {
-            this.removeHost(id);
-          }
-        }, 800);
-      });
-      tab.addEventListener('touchend', () => clearTimeout(pressTimer));
-      tab.addEventListener('touchmove', () => clearTimeout(pressTimer));
-
-      container.appendChild(tab);
-    }
   }
 
   showStatus(text, level) {
@@ -598,10 +362,7 @@ class App {
     el.className = `status status-${level}`;
 
     // Always allow tap to reconnect
-    el.onclick = () => {
-      const host = this.getActiveHost();
-      if (host) host.connect();
-    };
+    el.onclick = () => this.connect();
   }
 
   log(msg) {
