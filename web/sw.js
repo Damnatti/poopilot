@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poopilot-v3';
+const CACHE_NAME = 'poopilot-v4';
 const SHELL_URLS = [
   '/',
   '/index.html',
@@ -30,8 +30,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first: try fresh version, fall back to cache
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Don't cache API calls (relay, offer, answer)
+  if (url.pathname.startsWith('/relay/') || url.pathname === '/offer' || url.pathname === '/answer') {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((resp) => {
@@ -39,6 +45,10 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return resp;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() =>
+        caches.match(event.request).then((cached) =>
+          cached || new Response('Offline', { status: 503 })
+        )
+      )
   );
 });
