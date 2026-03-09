@@ -13,12 +13,12 @@ class ApprovalManager {
     el.dataset.id = request.id;
     el.innerHTML = `
       <div class="approval-header">⚡ Action Required</div>
-      <div class="approval-session">Session: ${request.session}</div>
+      <div class="approval-session">Session: ${this._escapeHtml(request.session)}</div>
       <div class="approval-prompt">${this._escapeHtml(request.prompt)}</div>
       <div class="approval-context"><pre>${this._escapeHtml(request.context || '')}</pre></div>
       <div class="approval-buttons">
-        <button class="btn-deny" data-id="${request.id}">✗ Deny</button>
-        <button class="btn-approve" data-id="${request.id}">✓ Approve</button>
+        <button class="btn-deny" data-id="${this._escapeHtml(request.id)}">✗ Deny</button>
+        <button class="btn-approve" data-id="${this._escapeHtml(request.id)}">✓ Approve</button>
       </div>
     `;
 

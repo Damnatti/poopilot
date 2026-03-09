@@ -292,11 +292,14 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 				continue
 			}
 
+			// Grab peer reference under lock — hold no lock during WaitDisconnect
 			pm.mu.Lock()
 			peer := pm.peer
 			pm.mu.Unlock()
 
-			pm.acceptAnswer(answer)
+			if err := pm.acceptAnswer(answer); err != nil {
+				continue
+			}
 
 			// Wait for this connection to drop before creating a new offer
 			if peer != nil {
@@ -312,7 +315,9 @@ func startRelaySignaling(ctx context.Context, pm *peerManager, relayURL, localUR
 			if err != nil {
 				continue
 			}
-			relay.PostOffer(relayURL, roomID, newOffer)
+			if err := relay.PostOffer(relayURL, roomID, newOffer); err != nil {
+				fmt.Fprintf(os.Stderr, "\r\n[poopilot] Relay re-offer failed: %v\r\n", err)
+			}
 		}
 	}()
 

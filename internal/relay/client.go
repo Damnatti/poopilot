@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 // PostOffer uploads the compressed offer SDP to the relay and clears any stale answer.
 func PostOffer(relayURL, roomID, offer string) error {
 	base := strings.TrimRight(relayURL, "/")
@@ -17,7 +19,9 @@ func PostOffer(relayURL, roomID, offer string) error {
 	// Clear stale answer first
 	delURL := fmt.Sprintf("%s/relay/%s/answer", base, roomID)
 	delReq, _ := http.NewRequest("DELETE", delURL, nil)
-	http.DefaultClient.Do(delReq)
+	if resp, err := httpClient.Do(delReq); err == nil {
+		resp.Body.Close()
+	}
 
 	url := fmt.Sprintf("%s/relay/%s/offer", base, roomID)
 	req, err := http.NewRequest("PUT", url, strings.NewReader(offer))
@@ -26,7 +30,7 @@ func PostOffer(relayURL, roomID, offer string) error {
 	}
 	req.Header.Set("Content-Type", "text/plain")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("relay post offer: %w", err)
 	}
@@ -62,7 +66,7 @@ func PollAnswer(ctx context.Context, relayURL, roomID string) (string, error) {
 }
 
 func fetchAnswer(url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", err
 	}

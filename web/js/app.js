@@ -305,6 +305,11 @@ class App {
   }
 
   cleanup() {
+    if (this._pairTimeout) {
+      clearTimeout(this._pairTimeout);
+      this._pairTimeout = null;
+    }
+
     for (const [id, term] of this.sessions) {
       term.dispose();
       const el = document.getElementById(`term-${this._activeKey}-${id}`);

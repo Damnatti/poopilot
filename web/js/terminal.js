@@ -65,11 +65,12 @@ class TerminalSession {
       });
     }
 
-    window.addEventListener('resize', () => {
+    this._resizeHandler = () => {
       if (this.fitAddon) {
         try { this.fitAddon.fit(); } catch(e) {}
       }
-    });
+    };
+    window.addEventListener('resize', this._resizeHandler);
   }
 
   writeOutput(data) {
@@ -99,6 +100,10 @@ class TerminalSession {
   }
 
   dispose() {
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
     if (this.term) this.term.dispose();
   }
 }

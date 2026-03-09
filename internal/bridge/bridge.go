@@ -193,7 +193,14 @@ func (b *Bridge) handleTermInput(msg protocol.Message) {
 	if !ok {
 		return
 	}
-	sess.Write(msg.Payload)
+	data := msg.Payload
+	for len(data) > 0 {
+		n, err := sess.Write(data)
+		if err != nil {
+			return
+		}
+		data = data[n:]
+	}
 }
 
 func (b *Bridge) handleTermResize(msg protocol.Message) {
@@ -232,9 +239,9 @@ func (b *Bridge) handleApprovalResponse(msg protocol.Message) {
 	}
 
 	if resp.Approved {
-		sess.Write([]byte("y\n"))
+		_, _ = sess.Write([]byte("y\n"))
 	} else {
-		sess.Write([]byte("n\n"))
+		_, _ = sess.Write([]byte("n\n"))
 	}
 }
 
