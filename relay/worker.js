@@ -1,15 +1,21 @@
 // Cloudflare Worker — minimal signaling relay for poopilot.
 // Stores offer/answer SDP blobs in KV with a 5-minute TTL.
 // No terminal data ever touches this server.
+// Static PWA files are served by CF Workers Assets (configured in wrangler.toml).
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // CORS
+    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders() });
+    }
+
+    // Only handle /relay/* paths — everything else falls through to static assets
+    if (!path.startsWith('/relay/')) {
+      return env.ASSETS.fetch(request);
     }
 
     // PUT /relay/:room/offer
