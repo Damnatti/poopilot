@@ -274,7 +274,8 @@ class App {
       this.log(`Offer: ${data.offer?.length} chars`);
       await this.startPairing(data.offer);
     } catch (e) {
-      this.showStatus(`Network error: ${e.message}`, 'error');
+      this.showStatus(`Network error: ${e.message} — retrying...`, 'error');
+      setTimeout(() => this.connectLocal(), 3000);
     }
   }
 
@@ -297,7 +298,9 @@ class App {
       this.log(`Relay offer: ${data.offer?.length} chars`);
       await this.startPairing(data.offer);
     } catch (e) {
-      this.showStatus(`Relay error: ${e.message}`, 'error');
+      this.showStatus(`Relay error: ${e.message} — retrying...`, 'error');
+      const activeKey = this._activeKey;
+      setTimeout(() => { if (this._activeKey === activeKey) this.connectViaRelay(roomId); }, 3000);
     }
   }
 
@@ -412,8 +415,9 @@ class App {
         this.showStatus(`Pair error: ${text}`, 'error');
       }
     } catch (e) {
-      this.showStatus(`Error: ${e.message}`, 'error');
+      this.showStatus(`Error: ${e.message} — retrying...`, 'error');
       this.log(e.stack);
+      setTimeout(() => this.connect(), 3000);
     }
   }
 
