@@ -1,0 +1,225 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+  min-height: 36px;
+}
+
+.logo {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.status {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-info { background: #1f6feb33; color: #58a6ff; }
+.status-success { background: #23863633; color: #3fb950; }
+.status-warning { background: #9e6a0333; color: #d29922; }
+.status-error { background: #f8514933; color: #ff7b72; }
+
+/* Session tabs */
+#session-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px 6px;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  overflow-x: auto;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+#session-tabs:empty {
+  display: none;
+}
+
+.session-tab {
+  padding: 4px 12px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px 6px 0 0;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.session-tab.active {
+  background: #0d1117;
+  color: #e6edf3;
+  border-bottom-color: #0d1117;
+}
+
+/* Terminal area — takes all remaining space */
+#terminals {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.terminal-pane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.terminal-pane .xterm-viewport {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* Approval overlay */
+#approvals {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.approval-card {
+  background: #1c2128;
+  border: 2px solid #f85149;
+  border-radius: 12px;
+  padding: 12px;
+  pointer-events: auto;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.approval-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f85149;
+  margin-bottom: 6px;
+}
+
+.approval-session {
+  font-size: 11px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.approval-prompt {
+  font-size: 14px;
+  color: #e6edf3;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.approval-context {
+  max-height: 80px;
+  overflow: auto;
+  margin-bottom: 10px;
+}
+
+.approval-context pre {
+  font-size: 11px;
+  color: #8b949e;
+  white-space: pre-wrap;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.approval-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.approval-buttons button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-approve { background: #238636; color: #fff; }
+.btn-approve:active { background: #2ea043; }
+.btn-deny { background: #da3633; color: #fff; }
+.btn-deny:active { background: #f85149; }
+
+/* Debug log */
+#debug-log {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 20vh;
+  overflow-y: auto;
+  background: #000;
+  color: #0f0;
+  font-size: 9px;
+  font-family: monospace;
+  padding: 2px 4px;
+  z-index: 9999;
+  opacity: 0.8;
+  display: none;
+}
+
+#debug-log.visible {
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .approval-buttons button {
+    padding: 16px;
+    font-size: 17px;
+  }
+}
