@@ -114,9 +114,61 @@ Then save your relay URL:
 
 ```bash
 echo 'export POOPILOT_RELAY=https://your-relay.workers.dev' >> ~/.zshrc
-source ~/.zshrc
-poopilot setup  # verify it works
 ```
+
+### Setting up a TURN server (recommended for cross-network)
+
+When your Mac and phone are on different networks (e.g. VPN + mobile data), WebRTC may fail to establish a direct connection. A TURN server acts as a relay for the media traffic.
+
+**Install coturn on any VPS (Ubuntu/Debian):**
+
+```bash
+apt-get install -y coturn
+
+# Generate a shared secret
+SECRET=$(openssl rand -hex 16)
+
+# Write config
+cat > /etc/turnserver-poopilot.conf << EOF
+listening-port=3478
+realm=poopilot.turn
+use-auth-secret
+static-auth-secret=$SECRET
+external-ip=$(curl -s ifconfig.me)
+no-cli
+no-multicast-peers
+no-loopback-peers
+EOF
+
+# Create a systemd service
+cat > /etc/systemd/system/coturn-poopilot.service << EOF
+[Unit]
+Description=coturn TURN server for poopilot
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/turnserver -c /etc/turnserver-poopilot.conf
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable --now coturn-poopilot
+
+# Open firewall ports
+ufw allow 3478/udp
+ufw allow 3478/tcp
+ufw allow 49152:65535/udp
+```
+
+**Configure poopilot to use it:**
+
+```bash
+echo 'export POOPILOT_TURN_HOST=YOUR_VPS_IP' >> ~/.zshrc
+echo 'export POOPILOT_TURN_SECRET=YOUR_SECRET' >> ~/.zshrc
+```
+
+TURN credentials are generated automatically and sent to the phone via the signaling payload. No manual credential management needed.
 
 ## Requirements
 
