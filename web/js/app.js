@@ -291,6 +291,25 @@ class App {
       tab.addEventListener('click', () => this.switchSession(s.id));
       tabs.appendChild(tab);
     });
+
+    // "+" button to create new session
+    const addBtn = document.createElement('button');
+    addBtn.className = 'session-tab session-tab-add';
+    addBtn.textContent = '+';
+    addBtn.addEventListener('click', () => this.promptNewSession());
+    tabs.appendChild(addBtn);
+  }
+
+  promptNewSession() {
+    const cmd = prompt('Command to run:', 'bash');
+    if (!cmd || !cmd.trim()) return;
+
+    const parts = cmd.trim().split(/\s+/);
+    const command = parts[0];
+    const args = parts.slice(1);
+
+    const msg = encodeJSON(MsgType.SESSION_CREATE, { command, args });
+    this.rtc?.sendOnChannel('control', msg);
   }
 
   switchSession(sessionId) {

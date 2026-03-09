@@ -87,6 +87,13 @@ header {
   border-bottom-color: #0d1117;
 }
 
+.session-tab-add {
+  color: #3fb950;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
 /* Terminal area — takes all remaining space */
 #terminals {
   flex: 1;
