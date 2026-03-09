@@ -1,10 +1,14 @@
 package approval
 
 import (
+	"crypto/sha256"
 	"regexp"
 	"strings"
 	"sync"
 )
+
+// ansiEscape matches ANSI escape sequences.
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 // Pattern is a compiled regex pattern for detecting approval prompts.
 type Pattern struct {
@@ -24,28 +28,29 @@ type Detection struct {
 
 // Detector scans terminal output for yes/no approval prompts.
 type Detector struct {
-	patterns    []*Pattern
-	seenOffsets map[int]bool // deduplication by line offset
-	mu          sync.Mutex
+	patterns []*Pattern
+	seen     map[[32]byte]bool // deduplication by content hash
+	mu       sync.Mutex
 }
 
 // NewDetector creates a detector with default patterns for common AI CLI tools.
 func NewDetector() *Detector {
 	d := &Detector{
-		seenOffsets: make(map[int]bool),
+		seen: make(map[[32]byte]bool),
 	}
 
 	// Claude Code patterns
 	d.addPattern("claude_proceed", `(?i)(do you want to proceed|proceed\s*\?\s*\[)`, "claude")
 	d.addPattern("claude_allow", `(?i)(allow once|allow always|allow this|deny this)`, "claude")
-	d.addPattern("claude_yesno", `(?i)\[(Y/n|y/N|Yes/No)\]`, "claude")
+	d.addPattern("claude_yesno", `(?i)\[?(Y/n|y/N|Yes/No)\]?`, "claude")
 	d.addPattern("claude_tool", `(?i)(Allow|Deny|approve)\s+(tool|this action|this command)`, "claude")
+	d.addPattern("claude_permission", `(?i)(do you want to allow|would you like to allow|permission to)`, "claude")
 
 	// Codex patterns
 	d.addPattern("codex_approve", `(?i)(approve|reject|confirm)\s*(this|the)?\s*(change|action|edit)`, "codex")
 
 	// Generic patterns
-	d.addPattern("generic_yesno", `\?\s*\[(Y/n|y/N)\]\s*$`, "generic")
+	d.addPattern("generic_yesno", `\?\s*\[?(Y/n|y/N)\]?\s*$`, "generic")
 	d.addPattern("generic_proceed", `(?i)(proceed|continue|accept|confirm)\s*\?\s*$`, "generic")
 	d.addPattern("generic_yn", `(?i)\(y/n\)\s*:?\s*$`, "generic")
 
@@ -81,20 +86,30 @@ func (d *Detector) Scan(output []byte) []Detection {
 	var detections []Detection
 
 	for lineIdx, line := range lines {
-		if d.seenOffsets[lineIdx] {
+		// Strip ANSI escape codes for matching
+		clean := ansiEscape.ReplaceAllString(line, "")
+		clean = strings.TrimSpace(clean)
+
+		if clean == "" {
+			continue
+		}
+
+		// Deduplicate by content hash
+		hash := sha256.Sum256([]byte(clean))
+		if d.seen[hash] {
 			continue
 		}
 
 		for _, p := range d.patterns {
-			if loc := p.Regex.FindStringIndex(line); loc != nil {
-				d.seenOffsets[lineIdx] = true
+			if loc := p.Regex.FindStringIndex(clean); loc != nil {
+				d.seen[hash] = true
 
 				context := getContext(lines, lineIdx, 2)
 				detections = append(detections, Detection{
 					PatternName: p.Name,
 					Tool:        p.Tool,
-					Prompt:      line[loc[0]:loc[1]],
-					Context:     context,
+					Prompt:      clean[loc[0]:loc[1]],
+					Context:     ansiEscape.ReplaceAllString(context, ""),
 					LineOffset:  lineIdx,
 				})
 				break // one detection per line
@@ -109,7 +124,7 @@ func (d *Detector) Scan(output []byte) []Detection {
 func (d *Detector) Reset() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.seenOffsets = make(map[int]bool)
+	d.seen = make(map[[32]byte]bool)
 }
 
 // getContext returns surrounding lines around the given index.

@@ -4,6 +4,7 @@ class ApprovalManager {
     this.container = containerEl;
     this._onResponse = null;
     this.activeRequests = new Map();
+    this._audioCtx = null;
   }
 
   showRequest(request) {
@@ -34,19 +35,54 @@ class ApprovalManager {
     this.container.appendChild(el);
     this.activeRequests.set(request.id, el);
 
-    this.vibrate();
-    this.notify('poopilot', `Action required: ${request.prompt}`);
+    this._alert();
   }
 
-  vibrate() {
+  _alert() {
+    // Vibrate (Android only — iOS doesn't support Vibration API)
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
     }
+
+    // Play a short beep sound (works on iOS and Android)
+    this._playBeep();
+
+    // Notification (works on Android, iOS only if added to Home Screen)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('poopilot', {
+        body: 'Action required — approve or deny',
+        tag: 'poopilot-approval', // replaces previous notification
+      });
+    }
   }
 
-  async notify(title, body) {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/icon-192.png' });
+  _playBeep() {
+    try {
+      if (!this._audioCtx) {
+        this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = this._audioCtx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+      // Second beep
+      setTimeout(() => {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.frequency.value = 1100;
+        gain2.gain.value = 0.3;
+        osc2.start();
+        osc2.stop(ctx.currentTime + 0.15);
+      }, 200);
+    } catch (e) {
+      // AudioContext not available
     }
   }
 
